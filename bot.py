@@ -1,3 +1,4 @@
+import logging
 from aiogram import Bot, types
 from aiogram.utils import executor
 from aiogram.dispatcher import Dispatcher
@@ -16,22 +17,31 @@ import os
 from config import PORT_FOR_SERVER, HOST
 
 
+# Initialize FSM storage
+memory_storage = MemoryStorage()
 
+# Configure logging
+logging.basicConfig(level=logging.INFO)
 
 
 
 #Connected API
 token = "6985975373:AAFODgMeCWBSSt6XmkCr4frqPjSKO6FzX7Y"
 bot = Bot(token=token)
-dp = Dispatcher(bot)
+dp = Dispatcher(bot, storage=memory_storage)
 headers = {"Accept_Language":"ru"}
 file_name = ""
+lstproduct = ""
 
 #Create buttons
 keyboard1 = ReplyKeyboardMarkup(resize_keyboard=True).row(
     KeyboardButton("Прикрепите файл чека"),
-    KeyboardButton("Что у меня в холодильнике")
-)
+    KeyboardButton("Что у меня в холодильнике")).add(
+    KeyboardButton("Добавить продукты"))
+
+class InputUerData(StatesGroup):
+    step_1 = State()
+
 
 def send_file(sck: socket.socket, filename):
     # Получение размера файла.
@@ -56,6 +66,18 @@ def Json_read(filename):
  
     return l
 
+def json_writting(from_name: str, command: str, date: dict):
+    to_json = {
+        "from": from_name,
+        "command": command,
+        "date": date
+    }
+
+    with open("new.json", 'w') as file:
+        json.dump(to_json, file)
+
+        return "new.json"
+
 
 
 @dp.message_handler(commands="start")
@@ -71,6 +93,12 @@ async def ans_for_but_fake(message: types.Message):
 @dp.message_handler(Text(equals='Что у меня в холодильнике'))
 async def list_fridge(message: types.Message):
     global file_name
+
+    conn = socket.create_connection((HOST,PORT_FOR_SERVER))
+    send_file(conn,json_writting("telegram", "=", "give data about fridge", {}))
+    print("check")
+
+
     for i in Json_read(file_name):
         name_product = list(i.keys())[0]
         text = f"Осталось {name_product} в количестве {i[name_product]}"
@@ -80,7 +108,7 @@ async def list_fridge(message: types.Message):
 
 
 @dp.message_handler(content_types=[types.ContentType.DOCUMENT])
-async def bot_ans_pull_json(message: types.Message ):
+async def bot_ans_push_json(message: types.Message ):
     documend_id = message.document.file_id
     file_info = await bot.get_file(documend_id)
     fi = file_info.file_path
@@ -93,6 +121,27 @@ async def bot_ans_pull_json(message: types.Message ):
     send_file(conn, file_name)
     print("GOOOOD BLIAT")
     
+
+@dp.message_handler(Text(equals='Добавить продукты'))
+async def add_product_createState(message: types.Message):
+    await message.answer("Напишите все продукты кототорые вы хотите добавить в одном сообщении")
+    await InputUerData.step_1.set()
+
+
+@dp.message_handler(state=InputUerData.step_1, content_types=types.ContentTypes.TEXT)
+async def add_product_to_list(message:types.Message, state:FSMContext):
+    global lstproduct
+    async with state.proxy() as lstproduct:
+        lstproduct = message.text.split("\n")
+    await state.finish()
+
+    dictt = dict()
+   
+    dictt[str(message.chat.username)] = lstproduct
+
+    conn = socket.create_connection((HOST,PORT_FOR_SERVER))
+    send_file(conn,json_writting("telegram", "=", "update_bd", dictt))
+    print("check")
 
 
 if __name__ ==  '__main__':

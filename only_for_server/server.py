@@ -4,7 +4,7 @@ import os
 import json
 import pymysql
 import io
-from config import PORT_FOR_SERVER, HOST, PORT_FOR_DB, PASSWORD, DB_NAME, NAME_TABLE, USER
+from config import PORT_FOR_SERVER, HOST, HOST_FOR_DB, PORT_FOR_DB, PASSWORD, DB_NAME, NAME_TABLE, USER
 
 def receive_file_size(sck: socket.socket):
     fmt = "<Q"
@@ -45,12 +45,12 @@ def send_file(sck: socket.socket, filename):
         while read_bytes := f.read(1024):
             sck.sendall(read_bytes)
 
-def create_json(from_name: str, to_name: str, command: str, date: dict):
+def create_json(from_name: str, to_name: str, command: str, data: dict):
     to_json = {
         "from": from_name,
         "to": to_name,
         "command": command,
-        "date": date
+        "date": data
     }
 
     with open("new.json", 'w') as file:
@@ -84,7 +84,7 @@ def read_json(filename: str):
 def update_date_from_check(date: list):
     try:
         connection = pymysql.connect(
-            host=HOST,
+            host=HOST_FOR_DB,
             port=PORT_FOR_DB,
             user=USER,
             password=PASSWORD,
@@ -96,9 +96,11 @@ def update_date_from_check(date: list):
 
         try:
             with connection.cursor() as cursor:
+                print(date)
                 for elem in date:
                     name = list(elem.keys())[0]
-                    colvo = elem.setdefault(list(elem.keys())[1])
+                    print(name)
+                    colvo = elem.setdefault(list(elem.keys())[0])
 
                     insert_query = f"INSERT INTO {NAME_TABLE} (name, colvo) VALUES ('{name}, {colvo}');"
                     cursor.excecute(insert_query)
@@ -111,8 +113,11 @@ def update_date_from_check(date: list):
     except Exception as ex:
         print("Connection error")
         print(ex)
-        
 
+def return_data(sck: socket.socket):
+    pass #TODO: do new json (with func create_json) with datA and send (with func send_file)
+
+dict_of_command = {"update": update_date_from_check, "return": return_data}
 
 if __name__ == '__main__':
     server = socket.create_server((HOST, PORT_FOR_SERVER))
@@ -120,40 +125,27 @@ if __name__ == '__main__':
     colvo = 0
 
     while True:
-        try:
-            connection = pymysql.connect(
-                host=HOST,
-                port=PORT_FOR_DB,
-                user=USER,
-                password=PASSWORD,
-                database=DB_NAME,
-                cursorclass=pymysql.cursors.DictCursor
-            )
+        conn, addres = server.accept()
+        print("Тип подключен")
+        colvo += 1
 
-            print("Connection open...\n\n")
+        list_or_dict = receive_file(conn, f"try{colvo}.json")
 
-            try:
-                print("goood blait")
+        print(list_or_dict)
 
-            finally:
-                connection.close()
-                print("Connection close...\n\n")
+        if type(list_or_dict) is list:
+            update_date_from_check(list_or_dict)
+        else:
+            l = []
 
-        except Exception as ex:
-            print("Connection error")
-            print(ex)
+            for elem in list_or_dict["data"]:
+                new_d = {elem: list_or_dict["data"].setdefault(elem)}
+                print(new_d)                    
+                l.append(new_d)
+            
+            print(l)
 
-
-        # conn, addres = server.accept()
-        # print("Тип подключен")
-        # colvo += 1
-
-        # list_or_dict = receive_file(conn, f"try{colvo}.json")
-
-        # if type(list_or_dict) is list:
-        #     update_date_from_check(list_or_dict)
-        # else:
-        #     l = []
+            update_date_from_check(l)
 
 
-        # conn.close()
+        conn.close()

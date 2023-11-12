@@ -1,6 +1,0 @@
-{
-    "from": "telegramm",
-    "to": "server",
-    "command": "update",
-    "date": false
-}
